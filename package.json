@@ -1,0 +1,79 @@
+{
+  "name": "@particle-academy/fancy-walkthrough",
+  "version": "0.1.0",
+  "description": "First-party guided walkthroughs for React: self-registering targets, a spotlight that survives scroll, resize and overflow, JSON steps an agent can author, and activation events built in. Replaces intro.js-style tours.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Particle-Academy/fancy-walkthrough.git"
+  },
+  "homepage": "https://github.com/Particle-Academy/fancy-walkthrough#readme",
+  "bugs": "https://github.com/Particle-Academy/fancy-walkthrough/issues",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit && eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run test && npm run lint && npm run build"
+  },
+  "keywords": [
+    "react",
+    "walkthrough",
+    "onboarding",
+    "product-tour",
+    "spotlight",
+    "intro.js-alternative",
+    "human-plus",
+    "fancy",
+    "particle-academy"
+  ],
+  "peerDependencies": {
+    "@particle-academy/react-fancy": ">=5.27 <6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0"
+  },
+  "devDependencies": {
+    "@particle-academy/react-fancy": "^5.27.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.11"
+  }
+}
