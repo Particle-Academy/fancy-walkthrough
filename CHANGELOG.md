@@ -11,6 +11,24 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-29
+
+### Fixed
+
+- **The published tarball now ships `docs/`.** 0.1.0 had no `docs/` directory
+  and its `files` array omitted it, so the package went to npm with a README and
+  nothing else. The workspace publishing protocol lists `files: ["dist", "docs",
+  "README.md"]` as a hard requirement for a TS package precisely so the tarball
+  carries its own reference — an agent resolving the package offline has only
+  what shipped.
+
+  Adds `docs/Walkthrough.md`, `docs/Spotlight.md` and
+  `docs/WalkthroughTarget.md`: full prop tables, the `advanceOn` and
+  `whenMissing` semantics, the event list, and why `firstValue` rather than
+  completion is the number to watch.
+
+  No code changed.
+
 ## [0.1.0] - 2026-09-29
 
 ### Added
