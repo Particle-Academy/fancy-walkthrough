@@ -39,8 +39,15 @@ jobs:
         with:
           node-version: "22"
 
+      # The same npm the Publish step uses, and the same one every other repo in
+      # the kit installs with. The runner ships npm 10.x, which has npm/cli#4828
+      # -- it does not install a platform's optional dependency that the lockfile
+      # has no `packages` entry for, and rollup ships its Linux binary that way.
+      # `npm ci` is worse still: it installs STRICTLY from the lockfile, so it
+      # cannot add the missing binary at all. Both spellings failed here on
+      # Linux from the day this repo was created.
       - name: Install
-        run: npm install --no-audit --no-fund
+        run: npx -y npm@11.18.0 install --no-audit --no-fund
 
       - name: Type-check
         run: npm run lint
