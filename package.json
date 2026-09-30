@@ -1,6 +1,6 @@
 {
   "name": "@particle-academy/fancy-walkthrough",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "First-party guided walkthroughs for React: self-registering targets, a spotlight that survives scroll, resize and overflow, JSON steps an agent can author, and activation events built in. Replaces intro.js-style tours.",
   "repository": {
     "type": "git",

@@ -11,6 +11,34 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-29
+
+### Fixed
+
+- **Corrects the claim made in 0.1.2.** That entry said it fixed "the spotlight
+  did not move between targets". **It did not, because there was no such
+  product defect** — the symptom was an artefact of how I verified it.
+
+  What actually happened: the browser tab driving the check was a BACKGROUND
+  tab (`document.hidden === true`). Chrome throttles `requestAnimationFrame` to
+  zero there, so the glide's callback never ran — measured, not guessed: one
+  rAF scheduled, zero fired in 900ms. The hole therefore stayed on the first
+  target. `animate={false}` appeared to "fix" it only because that path draws
+  synchronously inside the layout effect and needs no rAF at all. A real user,
+  in a visible tab, would not have seen any of it.
+
+  The defect 0.1.2 genuinely fixed is real and unrelated to that symptom, and
+  stands: the glide measured elapsed time across **two clocks** (`start` from
+  `performance.now()`, `now` from the rAF timestamp) and clamped with
+  `Math.min(1, …)`, which caps only the top. A first callback stamped before the
+  call drives `t` negative and `lerp` extrapolates away from the target.
+  Reproduced and covered by `src/Spotlight.glide.test.tsx`.
+
+  No code changed in this release. The correction is the point: 0.1.2's entry is
+  the version an upgrading consumer reads, and it described a fix to a bug that
+  did not exist — which would send anyone debugging a stationary spotlight down
+  the wrong path. What to check first is whether the tab is visible.
+
 ## [0.1.2] - 2026-09-29
 
 ### Fixed
