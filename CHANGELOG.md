@@ -11,6 +11,34 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-29
+
+### Fixed
+
+- **The spotlight did not move between targets.** Every step after the first
+  kept the hole on the first step's target, so a tour with more than one target
+  was broken — which is most tours. Found by building the showcase's own site
+  tour on it.
+
+  The glide measured elapsed time across two clocks: `start` came from
+  `performance.now()` while `now` was the `requestAnimationFrame` timestamp. A
+  first callback carrying a timestamp from before the call makes the difference
+  negative, and the clamp was `Math.min(1, …)` — which caps only the top. So `t`
+  either went negative, and `lerp` extrapolated AWAY from the target (the hole
+  landing hundreds of pixels off-screen), or pinned at `0` and the glide never
+  advanced. Both read as "the spotlight never moved".
+
+  The clock now starts on the first rAF callback, so elapsed time is measured in
+  one timebase, and `t` is clamped at both ends.
+
+  **Why 0.1.0 and 0.1.1 looked fine:** the broken transition is element →
+  element. `null` → element skips the glide entirely (there is nothing to glide
+  *from*), so the first targeted step always drew correctly — and the package's
+  own demo only moved between targets that required a SCROLL, which fires a
+  re-measure and papered over it. `animate={false}` was unaffected throughout.
+
+  **What you must do: nothing**, beyond upgrading. No API changed.
+
 ## [0.1.1] - 2026-09-29
 
 ### Fixed

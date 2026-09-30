@@ -117,9 +117,18 @@ export function Spotlight({
       // page by 280ms reads as lag, not polish -- scroll and resize snap.
       if (targetChanged && animate && !prefersReducedMotion() && from && next && typeof requestAnimationFrame === "function") {
         if (glide.current !== null) cancelAnimationFrame(glide.current);
-        const start = performance.now();
+        // The clock starts on the FIRST rAF callback, not at `performance.now()`.
+        // Mixing the two timebases is what broke this: a callback timestamp from
+        // before the call makes the elapsed time negative, and `Math.min(1, ...)`
+        // clamps only the top -- so `t` either extrapolated AWAY from the target
+        // (the hole jumped hundreds of pixels off-screen) or pinned at 0 and the
+        // glide never advanced. Either way the spotlight appeared not to move,
+        // and only on an element -> element change: null -> element skips the
+        // glide entirely, which is why the first step always looked right.
+        let start: number | null = null;
         const step = (now: number) => {
-          const t = Math.min(1, (now - start) / GLIDE_MS);
+          if (start === null) start = now;
+          const t = Math.max(0, Math.min(1, (now - start) / GLIDE_MS));
           // Glide toward the LATEST measurement, so a scroll mid-glide lands
           // where the target is now rather than where it was.
           const to = measured.current;
