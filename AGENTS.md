@@ -18,6 +18,8 @@ The design record is the envelope's `.ai/plans/fancy-walkthrough.md`.
   the glide.
 - `src/Walkthrough.tsx` — step state, events, policies, the default card.
 - `src/types.ts` — `WalkthroughStep`, `WalkthroughDocument`, `WalkthroughEvent`.
+- `src/storage.ts` — `WalkthroughStorage` (`{ load, save, subscribe? }`), the
+  localStorage default adapter, and the progress shape check.
 
 ## Invariants, and the defect each stops
 
@@ -64,6 +66,24 @@ skipping or failing. A test mounts the target and moves the step in one update.
 every render notifies every subscriber twice per render of whatever holds the
 target. And an unregister removes only the element IT registered, so a remount
 that registers first is not undone by the old cleanup.
+
+**The transition is (walkthrough, index), not index.** A chain changes both
+in one update; the events effect ends the previous walkthrough (completed +
+chained) and starts the next from that one comparison.
+
+**Nothing runs until the store is read (`ready`).** Otherwise a resumed
+walkthrough first reports `started` at `defaultStep`, then jumps. Storage is
+touched ONLY in effects and adapter methods — never at import or render — which
+is the whole SSR guarantee; `Walkthrough.ssr.test.tsx` runs in a node env.
+
+**Only a walkthrough's own transition writes the store.** An idle
+`<Walkthrough>` on the page never saves, or it would clear another's progress.
+
+**The package never navigates.** `onNavigate` asks the host, once per step
+entry (keyed `walkthrough#index`), so a person wandering off is not dragged
+back. The navigation effect is declared BEFORE the policy effect and sets
+`navigatingRef` synchronously: in the same commit, a `whenMissing: "skip"` step
+must already know its page is still on the way.
 
 **The card is non-modal.** A focus trap would block the element a
 `target-click` step asks the person to use. Focus moves to the card per step;

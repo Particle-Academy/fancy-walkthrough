@@ -29,6 +29,9 @@ afterEach(() => {
   host = null;
   document.body.innerHTML = "";
   HTMLElement.prototype.getBoundingClientRect = realRect;
+  // In-progress state persists through localStorage by default (0.3); one
+  // test's running walkthrough must not resume in the next.
+  localStorage.clear();
   // Tests that stub scrollIntoView set it on HTMLElement.prototype, shadowing
   // whatever Element.prototype has. Removing the own property restores it.
   delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;

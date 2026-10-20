@@ -37,6 +37,8 @@ afterEach(() => {
   roots.length = 0;
   document.body.innerHTML = "";
   HTMLElement.prototype.getBoundingClientRect = realRect;
+  // In-progress state persists through localStorage by default (0.3).
+  localStorage.clear();
 });
 
 /** Mount `node` in a NEW React root, as a Blade island would. */

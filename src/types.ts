@@ -44,6 +44,14 @@ export interface WalkthroughStep {
    * `"fail"` stops the walkthrough and emits `walkthrough:error`.
    */
   whenMissing?: "wait" | "skip" | "fail";
+  /**
+   * The route this step's target lives on. When the step starts and the host
+   * is somewhere else, `<Walkthrough onNavigate>` is called so the HOST
+   * navigates (its router, its page transition) -- the package never does.
+   * The card waits for the target to register on the new page, and the
+   * missing-target policy is held off until the host has arrived.
+   */
+  route?: string;
 }
 
 /** A whole walkthrough as data. Spread it: `<Walkthrough {...doc}>`. */
@@ -58,6 +66,13 @@ export interface WalkthroughDocument {
    * `walkthrough:no-first-value`.
    */
   firstValue?: string;
+  /**
+   * The id of the walkthrough to start when this one COMPLETES (not when it
+   * is skipped). Resolved against `<Walkthrough walkthroughs>`; if it is not
+   * there, it is handed over through the storage adapter to whichever
+   * `<Walkthrough>` has that id, now or on a later page.
+   */
+  next?: string;
 }
 
 /**
@@ -69,6 +84,8 @@ export type WalkthroughEvent =
   | { type: "walkthrough:step"; walkthrough: string; step: string; index: number }
   | { type: "walkthrough:first-value"; walkthrough: string; step: string }
   | { type: "walkthrough:abandoned"; walkthrough: string; step: string; index: number }
-  | { type: "walkthrough:completed"; walkthrough: string }
+  | { type: "walkthrough:resumed"; walkthrough: string; step: string; index: number }
+  | { type: "walkthrough:completed"; walkthrough: string; next?: string }
+  | { type: "walkthrough:chained"; walkthrough: string; from: string; to: string }
   | { type: "walkthrough:no-first-value"; walkthrough: string }
   | { type: "walkthrough:error"; walkthrough: string; step: string; reason: string };

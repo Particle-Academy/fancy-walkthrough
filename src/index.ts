@@ -1,5 +1,13 @@
 export { Walkthrough, useWalkthrough } from "./Walkthrough";
-export type { WalkthroughApi, WalkthroughLabels, WalkthroughProps, WalkthroughStepContext } from "./Walkthrough";
+export type {
+  WalkthroughApi,
+  WalkthroughLabels,
+  WalkthroughNavigateContext,
+  WalkthroughProps,
+  WalkthroughStepContext,
+} from "./Walkthrough";
+export { createLocalStorageAdapter } from "./storage";
+export type { WalkthroughProgress, WalkthroughStorage } from "./storage";
 export { Spotlight } from "./Spotlight";
 export type { SpotlightProps } from "./Spotlight";
 export {

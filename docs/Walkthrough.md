@@ -51,6 +51,42 @@ const { start } = useWalkthrough();
 | animate | `boolean` | `true` | Glide between targets. Always off under `prefers-reduced-motion`. |
 | registry | `TargetRegistry` | its own | A registry from `createWalkthroughRegistry()`, shared with targets in OTHER React roots. See [WalkthroughTarget](./WalkthroughTarget.md#targets-in-another-react-root). |
 | bodyFormat | `"text" \| "markdown"` | `"text"` | How every step's `body` is read, unless the step sets its own. |
+| next | `string` | — | The walkthrough to start when this one completes. Comes with a spread document. |
+| walkthroughs | `WalkthroughDocument[]` | — | A library to chain into — or, with no `id`/`steps`, the whole set this plays. |
+| walkthrough | `string` | — | Controlled active walkthrough id (which one `step` indexes into). |
+| defaultWalkthrough | `string` | `id`, else first of `walkthroughs` | Uncontrolled starting walkthrough. |
+| onWalkthroughChange | `(id: string) => void` | — | Fires on a chain, a resume, or `start(at, id)`. |
+| storage | `WalkthroughStorage \| null` | `createLocalStorageAdapter()` | Where in-progress state is remembered. `null` = nothing. Read once, on mount. |
+| currentRoute | `string` | `location.pathname` | Where the host is, compared with `step.route` by string equality. |
+| onNavigate | `(step, { walkthrough, index }) => void` | — | Called once when a step with a `route` starts and the host is elsewhere. The host navigates. |
+
+## Chains, other pages, and resume
+
+```ts
+interface WalkthroughStorage {
+  load(): WalkthroughProgress | null | Promise<WalkthroughProgress | null>;
+  save(progress: WalkthroughProgress | null): void | Promise<void>;
+  subscribe?(listener: () => void): () => void; // lets a hand-over reach a mounted <Walkthrough>
+}
+interface WalkthroughProgress {
+  walkthrough: string;
+  step?: string;   // absent = handed over by a chain, not started yet
+  index: number;   // fallback when `step` no longer names a step
+}
+```
+
+- **Chain**: when a walkthrough with `next` completes, the next one starts in
+  place if it is in `walkthroughs`; otherwise `{ walkthrough: next, index: 0 }`
+  is saved for the `<Walkthrough>` that has it. Skipping never chains.
+- **Route**: a step's `route` that differs from `currentRoute` calls
+  `onNavigate` once per step entry (a person wandering off mid-step is not
+  dragged back). Until the target registers or `currentRoute` matches, the card
+  waits, carries `data-walkthrough-navigating`, and `whenMissing` is held off.
+- **Resume**: every step change saves `{ walkthrough, step, index }`; finishing
+  or skipping saves `null`. On mount the record is read and, if it names a
+  walkthrough this one can play, it resumes there (`walkthrough:resumed`).
+  An idle `<Walkthrough>` never writes, so it cannot clear another's progress.
+  One in-progress walkthrough per storage key.
 
 ## `WalkthroughStep`
 
@@ -65,6 +101,7 @@ const { start } = useWalkthrough();
 | advanceOn | `"next" \| "target-click" \| "event"` | `"next"` | What moves it on. |
 | event | `string` | — | The host event, when `advanceOn` is `"event"`. |
 | whenMissing | `"wait" \| "skip" \| "fail"` | `"wait"` | What to do if `target` is not mounted. |
+| route | `string` | — | The page this step lives on. The host is asked to navigate there (`onNavigate`). |
 
 `advanceOn` is the difference between a tour and a slideshow. `"target-click"`
 waits for a real click on the real element **through** the spotlight — the click
@@ -91,7 +128,8 @@ Omitting `firstValue` runs fine, warns in development, and emits
 |------|------|-------------|
 | step | `number \| null` | Running step index, or `null`. |
 | current | `WalkthroughStep \| null` | The running step. |
-| start | `(at?: number) => void` | Start, optionally at an index. |
+| walkthrough | `string \| null` | The active walkthrough's id. |
+| start | `(at?: number, walkthrough?: string) => void` | Start, optionally at an index, optionally a named walkthrough. |
 | next / back | `() => void` | Move. |
 | skip | `() => void` | End early. Reported as `abandoned`. |
 | signal | `(event: string) => void` | Tell it something happened in your app. |
@@ -105,7 +143,9 @@ type WalkthroughEvent =
   | { type: "walkthrough:step";            walkthrough: string; step: string; index: number }
   | { type: "walkthrough:first-value";     walkthrough: string; step: string }
   | { type: "walkthrough:abandoned";       walkthrough: string; step: string; index: number }
-  | { type: "walkthrough:completed";       walkthrough: string }
+  | { type: "walkthrough:resumed";         walkthrough: string; step: string; index: number }
+  | { type: "walkthrough:completed";       walkthrough: string; next?: string }
+  | { type: "walkthrough:chained";         walkthrough: string; from: string; to: string }
   | { type: "walkthrough:no-first-value";  walkthrough: string }
   | { type: "walkthrough:error";           walkthrough: string; step: string; reason: string };
 ```

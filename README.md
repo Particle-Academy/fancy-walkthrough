@@ -91,6 +91,7 @@ type WalkthroughStep = {
   advanceOn?: "next" | "target-click" | "event";   // default "next"
   event?: string;           // for advanceOn: "event" -- see signal() below
   whenMissing?: "wait" | "skip" | "fail";          // default "wait"
+  route?: string;           // the page this step lives on -- see "Chains" below
 };
 ```
 
@@ -111,6 +112,44 @@ type WalkthroughStep = {
   `<Walkthrough.Target registry>`, `useWalkthroughTarget(id, { registry })`, or
   `<WalkthroughTargetsProvider registry>` around a whole root. See
   [docs/WalkthroughTarget.md](./docs/WalkthroughTarget.md#targets-in-another-react-root).
+
+## Chains, other pages, and resume
+
+A walkthrough can name the one to run after it, and a step can live on another
+page. Mount ONE `<Walkthrough>` in your persistent layout with the whole set:
+
+```tsx
+import { router, usePage } from "@inertiajs/react";
+
+const layout = { id: "layout", firstValue: "nav", next: "settings", steps: [/* … */] };
+const settings = {
+  id: "settings",
+  firstValue: "prefs",
+  steps: [{ id: "prefs", title: "Correspondence", target: "prefs", route: "/settings" }],
+};
+
+<Walkthrough
+  walkthroughs={[layout, settings]}
+  currentRoute={usePage().url}
+  onNavigate={(step) => router.visit(step.route!)}
+  onEvent={track}
+>
+  {children}
+</Walkthrough>
+```
+
+- **`next`** on a document starts that walkthrough when this one completes
+  (never when it is skipped), and emits `walkthrough:chained { from, to }`.
+- **`step.route`**: when the step starts and `currentRoute` is something else,
+  `onNavigate(step)` is called once and **your router navigates** — the
+  package never does. The card waits for the target to register on the new
+  page; `whenMissing` is held off until `currentRoute` matches.
+- **Resume**: progress (`{ walkthrough, step, index }`) goes through
+  `storage={{ load, save }}`, default `createLocalStorageAdapter()`, so a chain
+  survives the page change and a full reload (`walkthrough:resumed`). Pass
+  `storage={null}` to remember nothing.
+- A `next` that is NOT in `walkthroughs` is handed over through storage to the
+  `<Walkthrough>` with that id, on this page or a later one.
 
 ## Controlled
 
@@ -135,7 +174,9 @@ Or leave it uncontrolled with `defaultStep`, and drive it with
 | `walkthrough:step` | Diagnostic — which step is showing. Never the headline. |
 | `walkthrough:first-value` | The person completed the `firstValue` step. **This is the metric.** |
 | `walkthrough:abandoned` | Skipped, Escape, or ended by the host — with the step it happened on. |
-| `walkthrough:completed` | Reached the end. Explicitly not the success metric. |
+| `walkthrough:completed` | Reached the end (carries `next` when it chains). Explicitly not the success metric. |
+| `walkthrough:chained` | `{ from, to }` — one walkthrough handed over to the next. Where people drop out of a chain. |
+| `walkthrough:resumed` | Progress was read back from storage after a navigation or reload. Not counted as `started`. |
 | `walkthrough:no-first-value` | The document declares no (valid) `firstValue`. It still runs, and warns in development. |
 | `walkthrough:error` | A `whenMissing: "fail"` step's target was not mounted. |
 
@@ -169,9 +210,11 @@ person can see) and `cutoutPath(viewport, hole)` (the scrim as one SVG path).
 
 **0.1** — the walkthrough, targets, the spotlight, guided action, missing-target
 policies and the event stream. **0.2** — targets in other React roots through a
-shared registry, and markdown step bodies. Next: resume across reloads through a
-storage adapter, an authoring surface on an `/authoring` subpath (0.3), and an MCP
-bridge in `@particle-academy/agent-integrations` (0.4).
+shared registry, and markdown step bodies. **0.3** — chained walkthroughs,
+steps on other pages (the host navigates), and resume across navigation and
+reloads through a `{ load, save }` storage adapter. Next: an authoring surface
+on an `/authoring` subpath, and an MCP bridge in
+`@particle-academy/agent-integrations`.
 
 ## License
 

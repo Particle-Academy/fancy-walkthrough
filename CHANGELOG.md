@@ -11,6 +11,64 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-20
+
+**Pre-1.0 reminder:** this is a MINOR release, and in this package a minor may
+carry breaking changes. This one carries one behaviour change (see Changed);
+no API was removed or renamed.
+
+### Added
+
+- **Chained walkthroughs** (#2). `WalkthroughDocument.next` names the
+  walkthrough to start when this one **completes** (skipping never chains).
+  Give one `<Walkthrough>` a library with **`walkthroughs={[...docs]}`** and the
+  next one starts in place; if `next` is not in the library it is handed over
+  through the storage adapter to whichever `<Walkthrough>` has that id, already
+  mounted on the page or mounted on a later one.
+- **The active walkthrough is controlled state**: `walkthrough` +
+  `onWalkthroughChange`, or uncontrolled with `defaultWalkthrough`.
+  `useWalkthrough()` gains `walkthrough` (the active id) and
+  `start(at?, walkthrough?)`.
+- **Steps on another page.** `step.route` + **`<Walkthrough onNavigate>`**: when
+  a step starts and the host is elsewhere, `onNavigate(step, { walkthrough,
+  index })` is called once and the HOST navigates (Inertia's `router.visit`, its
+  own page transition). The package never navigates and depends on no router.
+  The card waits for the target to register on the new page, and the step's
+  `whenMissing` policy is held off until the host has arrived. Pass
+  **`currentRoute`** (compared by string equality) so the package knows where
+  the host is; without it, `window.location.pathname` is read in an effect.
+- **Resume across navigation and reloads** through a storage adapter, per the
+  design record's 2026-09-22 decision: **`storage={{ load, save }}`**, where
+  `load()` returns `WalkthroughProgress | null` (or a Promise of it) and
+  `save(progress | null)` stores it. `WalkthroughProgress` is
+  `{ walkthrough, step?, index }`; resume finds the step by id first, so
+  reordering steps does not resume on the wrong one. An optional `subscribe`
+  lets a hand-over reach a `<Walkthrough>` already on the page. The default is
+  **`createLocalStorageAdapter(key = "fancy-walkthrough")`**, which is SSR-safe
+  (nothing touches `window` at import or render) and degrades to remembering
+  nothing when storage is disabled or full.
+- **Events:** `walkthrough:chained { walkthrough, from, to }` when one hands
+  over to the next; `walkthrough:resumed { walkthrough, step, index }` instead
+  of `started` when progress is read back (so `started` stays an honest
+  denominator); `walkthrough:completed` now carries `next` when there is one.
+- **Handles:** the card carries `data-walkthrough-id` (the active walkthrough)
+  and, while the host is navigating to its page, `data-walkthrough-navigating`
+  (the route).
+- Types: `WalkthroughStorage`, `WalkthroughProgress`,
+  `WalkthroughNavigateContext`.
+
+### Changed
+
+- **In-progress walkthroughs now persist to localStorage by default.** A tour
+  that was running when the page reloaded resumes on the step it was on.
+  Finishing or skipping clears it. **To keep 0.2's behaviour, pass
+  `storage={null}`.** Nothing else to do: `id` and `steps` are now optional
+  (they may come from `walkthroughs` instead), which accepts everything that
+  compiled before.
+- Nothing runs or reports until the store has been read, so a resumed
+  walkthrough does not first report `started` at `defaultStep`. With a sync
+  store this happens in the mount effect, before anything is painted.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added
