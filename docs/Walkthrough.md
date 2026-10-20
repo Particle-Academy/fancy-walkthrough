@@ -49,6 +49,8 @@ const { start } = useWalkthrough();
 | radius | `number` | `10` | Hole corner radius. |
 | dismissOnScrimClick | `boolean` | `false` | A stray click should not end a tour. |
 | animate | `boolean` | `true` | Glide between targets. Always off under `prefers-reduced-motion`. |
+| registry | `TargetRegistry` | its own | A registry from `createWalkthroughRegistry()`, shared with targets in OTHER React roots. See [WalkthroughTarget](./WalkthroughTarget.md#targets-in-another-react-root). |
+| bodyFormat | `"text" \| "markdown"` | `"text"` | How every step's `body` is read, unless the step sets its own. |
 
 ## `WalkthroughStep`
 
@@ -58,6 +60,7 @@ const { start } = useWalkthrough();
 | target | `string` | — | A registered target id. Omitted = a centred step over a solid scrim. |
 | title | `string` | — | Heading. |
 | body | `string` | — | Body copy. |
+| bodyFormat | `"text" \| "markdown"` | the walkthrough's | `"markdown"` renders `body` through react-fancy's `ContentRenderer`, sanitised. `"text"` shows it as written. |
 | placement | `Placement` | auto | `top` / `bottom` / `left` / `right` (+ `-start` / `-end`). |
 | advanceOn | `"next" \| "target-click" \| "event"` | `"next"` | What moves it on. |
 | event | `string` | — | The host event, when `advanceOn` is `"event"`. |

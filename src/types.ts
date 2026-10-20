@@ -22,6 +22,12 @@ export interface WalkthroughStep {
   target?: string;
   title?: string;
   body?: string;
+  /**
+   * How `body` is read. `"text"` (default) shows it as written;
+   * `"markdown"` renders it through react-fancy's `ContentRenderer`,
+   * sanitised. Overrides the walkthrough's `bodyFormat`.
+   */
+  bodyFormat?: "text" | "markdown";
   placement?: Placement;
   /**
    * What moves the walkthrough on. `"next"` (default) is the button;

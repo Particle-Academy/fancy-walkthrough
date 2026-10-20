@@ -11,6 +11,30 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
+### Added
+
+- **Targets in another React root** (#1). A Laravel layout mounts its chrome as
+  separate roots (Blade islands) beside the Inertia page, and context cannot
+  cross roots, so a target there never registered and its step waited forever.
+  Create one registry with **`createWalkthroughRegistry()`**, pass it to
+  **`<Walkthrough registry>`**, and register targets with it from any root:
+  **`<Walkthrough.Target registry>`**, **`useWalkthroughTarget(id, { registry })`**
+  (or `useWalkthroughTarget(id, registry)`), or
+  **`<WalkthroughTargetsProvider registry>`** around a whole root with no
+  `<Walkthrough>` above it. An explicit registry wins over context. Nothing
+  queries the DOM.
+- **Markdown step bodies.** `bodyFormat: "markdown"` on a step, or
+  `<Walkthrough bodyFormat="markdown">` for every step, renders `body` through
+  react-fancy's `ContentRenderer`, sanitised. A step's own `bodyFormat` wins.
+- The body element carries `data-walkthrough-body` (`"text"` or `"markdown"`).
+- Types: `WalkthroughTargetOptions`, `WalkthroughTargetsProviderProps`.
+
+**Nothing to do:** plain string bodies stay plain text by default, and a
+walkthrough with no `registry` keeps its own, exactly as before. The
+react-fancy peer range is unchanged.
+
 ### Fixed
 
 - **`CHANGELOG.md` is now in the published tarball.** `files` did not whitelist it, so npm never shipped it — and this package puts breaking changes in MINOR releases and tells you in the README to read the entry before taking one. The instruction existed for the author, who has the file, and not for the consumer, who is the only one being instructed. Nothing for you to do; the file simply arrives from this release on.

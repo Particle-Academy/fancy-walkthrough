@@ -64,17 +64,38 @@ export function createTargetRegistry(): TargetRegistry {
   };
 }
 
+/**
+ * A registry to SHARE between React roots.
+ *
+ * A Laravel layout often mounts its chrome as separate roots (Blade islands)
+ * beside the Inertia page. Context cannot cross roots, so create one registry
+ * in a module, pass it to `<Walkthrough registry>`, and let each root's targets
+ * register with it: `<Walkthrough.Target registry>`,
+ * `useWalkthroughTarget(id, { registry })`, or `<WalkthroughTargetsProvider
+ * registry>` around a whole root. Same object as `createTargetRegistry()`.
+ */
+export function createWalkthroughRegistry(): TargetRegistry {
+  return createTargetRegistry();
+}
+
 const RegistryContext = createContext<TargetRegistry | null>(null);
 
-export function TargetRegistryProvider({
-  registry,
-  children,
-}: {
+export interface WalkthroughTargetsProviderProps {
   registry: TargetRegistry;
   children: ReactNode;
-}) {
+}
+
+/**
+ * Every target inside registers with `registry`, with no `<Walkthrough>` above
+ * it. Mount one at the top of each React root whose targets a walkthrough in
+ * ANOTHER root should see.
+ */
+export function WalkthroughTargetsProvider({ registry, children }: WalkthroughTargetsProviderProps) {
   return <RegistryContext.Provider value={registry}>{children}</RegistryContext.Provider>;
 }
+
+/** Internal name, kept for `<Walkthrough>`. */
+export const TargetRegistryProvider = WalkthroughTargetsProvider;
 
 export function useTargetRegistry(): TargetRegistry | null {
   return useContext(RegistryContext);
@@ -101,14 +122,31 @@ export function useTargetElement(id: string | undefined, explicit?: TargetRegist
   return useSyncExternalStore(subscribe, getSnapshot, () => null);
 }
 
+export interface WalkthroughTargetOptions {
+  /** Register here instead of with the walkthrough above in the tree. */
+  registry?: TargetRegistry;
+}
+
+function isRegistry(value: unknown): value is TargetRegistry {
+  return typeof (value as TargetRegistry | undefined)?.register === "function";
+}
+
 /**
  * Register your own element as a target: `<button ref={useWalkthroughTarget("save")}>`.
  *
  * For components that render their own DOM. Returns a ref callback, so the
  * registration follows the element: a remount registers the new one.
+ *
+ * Pass a shared registry (`{ registry }`, or the registry itself) to register
+ * with a walkthrough in another React root; it wins over context.
  */
-export function useWalkthroughTarget(id: string): (el: HTMLElement | null) => void {
-  const registry = useTargetRegistry();
+export function useWalkthroughTarget(
+  id: string,
+  options?: WalkthroughTargetOptions | TargetRegistry,
+): (el: HTMLElement | null) => void {
+  const fromContext = useTargetRegistry();
+  const explicit = isRegistry(options) ? options : options?.registry;
+  const registry = explicit ?? fromContext;
   const cleanup = useRef<(() => void) | null>(null);
 
   return useCallback(
@@ -124,6 +162,8 @@ export function useWalkthroughTarget(id: string): (el: HTMLElement | null) => vo
 export interface WalkthroughTargetProps {
   id: string;
   children: ReactNode;
+  /** Register here instead of with the walkthrough above in the tree -- for a target in another React root. */
+  registry?: TargetRegistry;
 }
 
 /**
@@ -137,8 +177,9 @@ export interface WalkthroughTargetProps {
  * The wrapper carries `data-walkthrough-target`, a stable handle for anything
  * that needs to find a target without the registry.
  */
-export function WalkthroughTarget({ id, children }: WalkthroughTargetProps) {
-  const registry = useTargetRegistry();
+export function WalkthroughTarget({ id, children, registry: explicit }: WalkthroughTargetProps) {
+  const fromContext = useTargetRegistry();
+  const registry = explicit ?? fromContext;
   const wrapper = useRef<HTMLSpanElement>(null);
   const registered = useRef<{ id: string; el: HTMLElement; registry: TargetRegistry; off: () => void } | null>(null);
 

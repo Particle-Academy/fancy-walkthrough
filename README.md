@@ -86,6 +86,7 @@ type WalkthroughStep = {
   target?: string;          // a registered target id; omitted = centred step
   title?: string;
   body?: string;
+  bodyFormat?: "text" | "markdown";                // default "text"; markdown is sanitised
   placement?: "top" | "top-start" | "top-end" | "bottom" | "bottom-start" | "bottom-end" | "left" | "right";
   advanceOn?: "next" | "target-click" | "event";   // default "next"
   event?: string;           // for advanceOn: "event" -- see signal() below
@@ -101,6 +102,15 @@ type WalkthroughStep = {
   `"wait"` (default) shows the step centred and says it is waiting — it never
   skips silently. `"skip"` moves on; `"fail"` stops and emits
   `walkthrough:error`.
+- **`bodyFormat: "markdown"`** renders `body` through react-fancy's
+  `ContentRenderer`, sanitised. Set it per step, or for every step with
+  `<Walkthrough bodyFormat="markdown">`.
+- **Targets in another React root** (Blade islands beside an Inertia page):
+  create one registry with `createWalkthroughRegistry()`, pass it to
+  `<Walkthrough registry>`, and register targets with
+  `<Walkthrough.Target registry>`, `useWalkthroughTarget(id, { registry })`, or
+  `<WalkthroughTargetsProvider registry>` around a whole root. See
+  [docs/WalkthroughTarget.md](./docs/WalkthroughTarget.md#targets-in-another-react-root).
 
 ## Controlled
 
@@ -158,8 +168,9 @@ person can see) and `cutoutPath(viewport, hole)` (the scrim as one SVG path).
 ## Status
 
 **0.1** — the walkthrough, targets, the spotlight, guided action, missing-target
-policies and the event stream. Next: resume across reloads through a storage
-adapter (0.2), an authoring surface on an `/authoring` subpath (0.3), and an MCP
+policies and the event stream. **0.2** — targets in other React roots through a
+shared registry, and markdown step bodies. Next: resume across reloads through a
+storage adapter, an authoring surface on an `/authoring` subpath (0.3), and an MCP
 bridge in `@particle-academy/agent-integrations` (0.4).
 
 ## License

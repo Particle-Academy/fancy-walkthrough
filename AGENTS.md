@@ -37,6 +37,12 @@ registry)`. Reading it from context there returns `null` forever and every step
 reads as "waiting for target" — that shipped in the first draft and 7 tests
 caught it.
 
+**An explicit registry wins over context, everywhere.** `<Walkthrough registry>`,
+`<Walkthrough.Target registry>` and `useWalkthroughTarget(id, { registry })`
+exist because context cannot cross React roots (Blade islands beside an
+Inertia page). A target that preferred context would register with the wrong
+walkthrough the moment one root nests inside another's provider.
+
 **Only the scrim PATH takes pointer events.** The container and the SVG are
 `pointer-events: none`; the path is `auto` and drawn `evenodd`, so the hole
 excludes it. Clicks in the hole reach the real target, which is what

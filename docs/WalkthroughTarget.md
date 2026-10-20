@@ -33,6 +33,7 @@ existing element cannot move anything.
 |------|------|-------------|
 | id | `string` | The id a step's `target` refers to. |
 | children | `ReactNode` | Wrapped content; the first element child is registered. |
+| registry | `TargetRegistry` | Register here instead of with the walkthrough above — for a target in another React root. |
 
 ## For a component that renders its own element
 
@@ -62,6 +63,32 @@ for driving a `<Spotlight>` yourself.
 
 `createTargetRegistry()` makes a standalone one. `<Walkthrough>` creates its
 own and exposes it as `useWalkthrough().registry`.
+
+## Targets in another React root
+
+Context does not cross React roots. A Laravel layout that mounts its chrome as
+separate roots (Blade islands) beside the Inertia page has targets no
+`<Walkthrough>` can reach through context. Create one registry in a module and
+hand it to every root:
+
+```tsx
+// tour-registry.ts
+import { createWalkthroughRegistry } from "@particle-academy/fancy-walkthrough";
+export const tourTargets = createWalkthroughRegistry();
+
+// The Inertia root: the one walkthrough.
+<Walkthrough id="layout" steps={steps} firstValue="menu" registry={tourTargets}>…</Walkthrough>
+
+// Any island, one target at a time…
+<Walkthrough.Target id="user-menu" registry={tourTargets}><UserMenu /></Walkthrough.Target>
+const ref = useWalkthroughTarget("sidebar", { registry: tourTargets }); // or (id, tourTargets)
+
+// …or the whole island at once, with no <Walkthrough> above it.
+<WalkthroughTargetsProvider registry={tourTargets}><SidebarNav /></WalkthroughTargetsProvider>
+```
+
+An explicit `registry` wins over context. Targets still register themselves:
+nothing queries the DOM, and a target unmounting in its own root unregisters.
 
 ## A missing target is a state, not a crash
 

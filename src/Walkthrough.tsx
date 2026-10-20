@@ -11,6 +11,7 @@ import {
 import {
   Button,
   Card,
+  ContentRenderer,
   Heading,
   Portal,
   Text,
@@ -97,6 +98,15 @@ export interface WalkthroughProps {
   animate?: boolean;
   /** Extra classes for the default card. */
   cardClassName?: string;
+  /**
+   * A registry from `createWalkthroughRegistry()`, shared with targets in OTHER
+   * React roots (`<Walkthrough.Target registry>`, `useWalkthroughTarget(id, {
+   * registry })`, `<WalkthroughTargetsProvider registry>`). Default: one of its
+   * own, reachable only by targets inside it.
+   */
+  registry?: TargetRegistry;
+  /** How every step's `body` is read, unless the step says otherwise. Default `"text"`. */
+  bodyFormat?: "text" | "markdown";
   /** The app. Targets anywhere inside register with this walkthrough. */
   children?: ReactNode;
 }
@@ -166,9 +176,12 @@ function WalkthroughRoot({
   dismissOnScrimClick = false,
   animate = true,
   cardClassName,
+  registry: sharedRegistry,
+  bodyFormat = "text",
   children,
 }: WalkthroughProps) {
-  const [registry] = useState(createTargetRegistry);
+  const [ownRegistry] = useState(createTargetRegistry);
+  const registry = sharedRegistry ?? ownRegistry;
   const [index, setIndex] = useControllableState<number | null>(controlledStep, defaultStep, onStepChange);
 
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...labelOverrides }), [labelOverrides]);
@@ -325,6 +338,7 @@ function WalkthroughRoot({
           skip={skip}
           renderStep={renderStep}
           cardClassName={cardClassName}
+          bodyFormat={bodyFormat}
         />
       )}
     </WalkthroughContext.Provider>
@@ -347,6 +361,7 @@ interface OverlayProps {
   skip: () => void;
   renderStep?: (context: WalkthroughStepContext) => ReactNode;
   cardClassName?: string;
+  bodyFormat: "text" | "markdown";
 }
 
 function WalkthroughOverlay({
@@ -365,6 +380,7 @@ function WalkthroughOverlay({
   skip,
   renderStep,
   cardClassName,
+  bodyFormat,
 }: OverlayProps) {
   const [hole, setHole] = useState<Rect | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -434,15 +450,30 @@ function WalkthroughOverlay({
               : { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2147483001, maxWidth: "min(28rem, calc(100vw - 2rem))", outline: "none" }
           }
         >
-          {renderStep ? renderStep(context) : <DefaultCard context={context} titleId={titleId} className={cardClassName} />}
+          {renderStep ? (
+            renderStep(context)
+          ) : (
+            <DefaultCard context={context} titleId={titleId} className={cardClassName} bodyFormat={bodyFormat} />
+          )}
         </div>
       </Portal>
     </>
   );
 }
 
-function DefaultCard({ context, titleId, className }: { context: WalkthroughStepContext; titleId: string; className?: string }) {
+function DefaultCard({
+  context,
+  titleId,
+  className,
+  bodyFormat,
+}: {
+  context: WalkthroughStepContext;
+  titleId: string;
+  className?: string;
+  bodyFormat: "text" | "markdown";
+}) {
   const { step, index, total, isFirst, isLast, waitingForTarget, labels, next, back, skip } = context;
+  const markdown = (step.bodyFormat ?? bodyFormat) === "markdown";
   const advance = step.advanceOn ?? "next";
   const progress = labels.progress.replace("{current}", String(index + 1)).replace("{total}", String(total));
 
@@ -462,11 +493,18 @@ function DefaultCard({ context, titleId, className }: { context: WalkthroughStep
             {step.title}
           </Heading>
         )}
-        {step.body && (
-          <Text as="p" size="sm">
-            {step.body}
-          </Text>
-        )}
+        {step.body &&
+          (markdown ? (
+            // ContentRenderer sanitises (its `unsafe` stays off): a step body
+            // can come from an agent or a stored document.
+            <div data-walkthrough-body="markdown">
+              <ContentRenderer value={step.body} format="markdown" />
+            </div>
+          ) : (
+            <Text as="p" size="sm" data-walkthrough-body="text">
+              {step.body}
+            </Text>
+          ))}
         {waitingForTarget && (
           <Text as="p" size="xs" color="muted" data-walkthrough-waiting="">
             {labels.waitingForTarget}
