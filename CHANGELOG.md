@@ -11,6 +11,8 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-27
+
 Additive, so this becomes **0.4.0** (a MINOR). It has one visible behaviour
 change (Back, see Changed) and two type additions that can matter to strict
 TypeScript. Nothing was removed or renamed.
