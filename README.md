@@ -99,6 +99,7 @@ type WalkthroughStep = {
   through the spotlight. Your app's own click handler still runs.
 - **`advanceOn: "event"`** waits for your app: call
   `useWalkthrough().signal("project:saved")` when the thing has happened.
+  See "Steps that need an action" below.
 - **`whenMissing`** decides what a step does when its target is not mounted.
   `"wait"` (default) shows the step centred and says it is waiting — it never
   skips silently. `"skip"` moves on; `"fail"` stops and emits
@@ -112,6 +113,35 @@ type WalkthroughStep = {
   `<Walkthrough.Target registry>`, `useWalkthroughTarget(id, { registry })`, or
   `<WalkthroughTargetsProvider registry>` around a whole root. See
   [docs/WalkthroughTarget.md](./docs/WalkthroughTarget.md#targets-in-another-react-root).
+
+## Steps that need an action
+
+`advanceOn: "target-click"` and `"event"` steps ask the person to do something
+**in your app**. Their card has no Next and no Back, only Skip and the
+instruction, and the keyboard does not advance them. When the click only
+*starts* the action (a save, a fetch, a redirect), spotlight the target and
+advance on the result:
+
+```tsx
+// { id: "create", target: "new-project", advanceOn: "event", event: "project:created", body: "Click New project." }
+const { signal, fail } = useWalkthrough();
+createProject.mutate(input, {
+  onSuccess: () => signal("project:created"),     // moves on
+  onError: (e) => fail("project:created", e.message), // stays put, shows the message
+});
+```
+
+- **New page?** Call `signal` when the page the action lands on mounts. The
+  walkthrough resumes from storage on the action step, and a signal that
+  arrives before storage is read is held and applied to that step.
+- **Outside the React tree?** `createWalkthroughController()` in a module,
+  `<Walkthrough controller={controller}>`, then `controller.signal(event)`
+  from anywhere.
+- A signal for a step that is not current is ignored, so there is no skipping
+  ahead. Nothing happens after the tour is dismissed. The step after an action
+  step offers no Back, because the tour cannot undo what the person did.
+
+Full rules: [docs/Walkthrough.md](./docs/Walkthrough.md#action-required-steps).
 
 ## Chains, other pages, and resume
 
@@ -162,7 +192,7 @@ const [step, setStep] = useState<number | null>(null); // null = not running
 ```
 
 Or leave it uncontrolled with `defaultStep`, and drive it with
-`useWalkthrough()` — `start`, `next`, `back`, `skip`, `signal`.
+`useWalkthrough()` — `start`, `next`, `back`, `skip`, `signal`, `fail`.
 
 ## Events
 
@@ -179,6 +209,7 @@ Or leave it uncontrolled with `defaultStep`, and drive it with
 | `walkthrough:resumed` | Progress was read back from storage after a navigation or reload. Not counted as `started`. |
 | `walkthrough:no-first-value` | The document declares no (valid) `firstValue`. It still runs, and warns in development. |
 | `walkthrough:error` | A `whenMissing: "fail"` step's target was not mounted. |
+| `walkthrough:action-failed` | The host reported an action step's action failed (`fail(event, message)`). Where people get stuck. |
 
 First value counts only when **the person** moves forward past that step. A
 host or agent moving `step` itself, or a step skipped by `whenMissing: "skip"`,
@@ -212,7 +243,9 @@ person can see) and `cutoutPath(viewport, hole)` (the scrim as one SVG path).
 policies and the event stream. **0.2** — targets in other React roots through a
 shared registry, and markdown step bodies. **0.3** — chained walkthroughs,
 steps on other pages (the host navigates), and resume across navigation and
-reloads through a `{ load, save }` storage adapter. Next: an authoring surface
+reloads through a `{ load, save }` storage adapter. **0.4** — action-required
+steps: no Next or Back, `signal` / `fail` from anywhere (including the page an
+action lands on, and outside the tree via a controller). Next: an authoring surface
 on an `/authoring` subpath, and an MCP bridge in
 `@particle-academy/agent-integrations`.
 

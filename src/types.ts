@@ -34,6 +34,13 @@ export interface WalkthroughStep {
    * `"target-click"` waits for the person to click the real target through the
    * spotlight; `"event"` waits for the host to signal `event`. The last two are
    * what make this guided ACTION rather than a slideshow.
+   *
+   * Both are ACTION-REQUIRED steps: the card shows no Next and no Back (only
+   * Skip and the instruction), and Back is not offered onto them from the step
+   * after -- the tour cannot undo what the person did in the app. Use
+   * `"event"` with a `target` when the click starts something the host must
+   * confirm (a server round-trip, data coming back, a redirect): the target is
+   * spotlighted, and the step moves on only when the host signals success.
    */
   advanceOn?: "next" | "target-click" | "event";
   /** The host event that advances this step when `advanceOn` is `"event"`. */
@@ -88,4 +95,5 @@ export type WalkthroughEvent =
   | { type: "walkthrough:completed"; walkthrough: string; next?: string }
   | { type: "walkthrough:chained"; walkthrough: string; from: string; to: string }
   | { type: "walkthrough:no-first-value"; walkthrough: string }
-  | { type: "walkthrough:error"; walkthrough: string; step: string; reason: string };
+  | { type: "walkthrough:error"; walkthrough: string; step: string; reason: string }
+  | { type: "walkthrough:action-failed"; walkthrough: string; step: string; event: string; message?: string };

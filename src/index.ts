@@ -6,6 +6,8 @@ export type {
   WalkthroughProps,
   WalkthroughStepContext,
 } from "./Walkthrough";
+export { createWalkthroughController } from "./controller";
+export type { WalkthroughActionMessage, WalkthroughController } from "./controller";
 export { createLocalStorageAdapter } from "./storage";
 export type { WalkthroughProgress, WalkthroughStorage } from "./storage";
 export { Spotlight } from "./Spotlight";

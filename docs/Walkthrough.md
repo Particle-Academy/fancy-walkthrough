@@ -59,6 +59,7 @@ const { start } = useWalkthrough();
 | storage | `WalkthroughStorage \| null` | `createLocalStorageAdapter()` | Where in-progress state is remembered. `null` = nothing. Read once, on mount. |
 | currentRoute | `string` | `location.pathname` | Where the host is, compared with `step.route` by string equality. |
 | onNavigate | `(step, { walkthrough, index }) => void` | — | Called once when a step with a `route` starts and the host is elsewhere. The host navigates. |
+| controller | `WalkthroughController` | — | From `createWalkthroughController()`: signal actions from OUTSIDE this tree (a query client, a module, another React root). Read once, on mount. |
 
 ## Chains, other pages, and resume
 
@@ -109,6 +110,64 @@ reaches your handler as well. `"event"` waits for your app to call
 `signal(event)`, which is how you gate on something asynchronous like a saved
 record.
 
+## Action-required steps
+
+A step with `advanceOn: "target-click"` or `"event"` asks the person to do
+something **in your app**, not in the card. Its card has **no Next and no
+Back**: only Skip, the step's text, and the hint. The keyboard does not advance
+it either.
+
+```ts
+{
+  id: "create",
+  title: "Create a project",
+  body: "Click New project. We continue once it is saved.",
+  target: "new-project",       // spotlighted; clicks go through to your button
+  advanceOn: "event",
+  event: "project:created",
+}
+```
+
+Use `"event"` with a `target` whenever the click only STARTS the action (a
+server round-trip, data coming back, a redirect). Then tell the walkthrough how
+it went, from wherever you find out:
+
+```tsx
+const { signal, fail } = useWalkthrough();
+createProject.mutate(input, {
+  onSuccess: () => signal("project:created"),
+  onError: (e) => fail("project:created", e.message), // optional
+});
+```
+
+| Case | What to do |
+|---|---|
+| **Server confirmation / data returns** | `signal(event)` in the success callback. `signal` always acts on the LATEST state, so a callback captured several renders ago still works. |
+| **The server rejects it** | `fail(event, message?)`. The step stays put, the card shows `message` (default `labels.actionFailed`) as `role="alert"`, and `walkthrough:action-failed` is emitted. The next `signal` clears it; so does any step change. |
+| **The action sends them to a new page** | Nothing special on the old page: the step is already saved. On the new page, call `signal(event)` when it mounts. That runs BEFORE `<Walkthrough>` has read its storage, so the signal is held and applied to the step it resumes on, once, and only if that step awaits it. |
+| **The signal comes from outside the tree** | `const controller = createWalkthroughController()` in a module, `<Walkthrough controller={controller}>`, then `controller.signal(event)` / `controller.fail(event, message)` from anywhere. A message sent while no walkthrough is mounted (mid-visit) is held for the next one, under the same once-only rule. |
+
+The rules, and why:
+
+- **Only the current step's own action counts.** A signal for a later step is
+  ignored and not remembered: honouring it would skip the steps between, and a
+  duplicate (a double submit) would skip one more.
+- **Nothing after dismissal.** Once skipped, a late `signal` or `fail` does
+  nothing, and a held one cannot restart the tour, because nothing is left in
+  storage to resume.
+- **No Back onto an action step.** The person already did that thing in the
+  app, and the tour cannot undo it. Going back would ask them to do it twice.
+  So the step after an action step offers no Back, and `back()` refuses. A host
+  or agent can still move a controlled `step`.
+- **`next()` still works** on an action step. It is the host's escape hatch.
+
+Handles on the card wrapper (present with a custom `renderStep` too):
+`data-walkthrough-requires-action="event" | "target-click"`,
+`data-walkthrough-awaiting="<event>"`, and `data-walkthrough-action-error`
+while a failure is showing. The default card's message carries
+`data-walkthrough-error`. `renderStep` receives `requiresAction`, `canGoBack`
+and `actionError`.
+
 `whenMissing` defaults to `"wait"` on purpose: a target that has not mounted yet
 shows the step centred until it appears, rather than silently skipping a step
 the person was supposed to see.
@@ -130,9 +189,11 @@ Omitting `firstValue` runs fine, warns in development, and emits
 | current | `WalkthroughStep \| null` | The running step. |
 | walkthrough | `string \| null` | The active walkthrough's id. |
 | start | `(at?: number, walkthrough?: string) => void` | Start, optionally at an index, optionally a named walkthrough. |
-| next / back | `() => void` | Move. |
+| next / back | `() => void` | Move. `back()` refuses to land on an action-required step. |
 | skip | `() => void` | End early. Reported as `abandoned`. |
-| signal | `(event: string) => void` | Tell it something happened in your app. |
+| signal | `(event: string) => void` | The action `event` happened in your app. Advances the current step if it awaits it. |
+| fail | `(event: string, message?: string) => void` | The action `event` failed. The step stays put and shows `message`. |
+| actionError | `string \| null` | The current step's failure message. |
 | registry | `TargetRegistry` | The target registry, for advanced cases. |
 
 ## Events
@@ -147,8 +208,13 @@ type WalkthroughEvent =
   | { type: "walkthrough:completed";       walkthrough: string; next?: string }
   | { type: "walkthrough:chained";         walkthrough: string; from: string; to: string }
   | { type: "walkthrough:no-first-value";  walkthrough: string }
-  | { type: "walkthrough:error";           walkthrough: string; step: string; reason: string };
+  | { type: "walkthrough:error";           walkthrough: string; step: string; reason: string }
+  | { type: "walkthrough:action-failed";   walkthrough: string; step: string; event: string; message?: string };
 ```
+
+An action step that succeeds is reported like any other advance
+(`walkthrough:step`, plus `first-value` when it is that step): the person did
+the thing. `action-failed` is where people get stuck.
 
 `abandoned` carries the step and index it was abandoned ON, which is the one
 number that tells you where a tour loses people.

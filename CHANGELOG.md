@@ -11,6 +11,65 @@ upgrading.
 
 ## [Unreleased]
 
+Additive, so this becomes **0.4.0** (a MINOR). It has one visible behaviour
+change (Back, see Changed) and two type additions that can matter to strict
+TypeScript. Nothing was removed or renamed.
+
+### Added
+
+- **Action-required steps.** Steps with `advanceOn: "target-click"` or
+  `"event"` ask the person to do something in the APP, not in the card. The
+  card shows no Next and no Back, only Skip, the instruction and the hint.
+  Enter and ArrowRight do not advance them. Use `"event"` with a `target` when
+  the click only starts the action (server confirmation, data returning, a
+  redirect): the target is spotlighted, and the step moves on when the host
+  calls `signal(event)`.
+- **`fail(event, message?)`** on `useWalkthrough()`, for when the action failed
+  (the server rejected it). The step stays put, the default card shows
+  `message` (or the new `labels.actionFailed`) as `role="alert"` with
+  `data-walkthrough-error`, and **`walkthrough:action-failed { walkthrough,
+  step, event, message? }`** is emitted. The next successful `signal`, or any
+  step change, clears it. `useWalkthrough().actionError` exposes it.
+- **`createWalkthroughController()`** + **`<Walkthrough controller>`**, for
+  signalling from outside the React tree: a query client's mutation defaults, a
+  module, another React root. `controller.signal(event)` /
+  `controller.fail(event, message?)`. A message sent while no walkthrough is
+  mounted (a per-page `<Walkthrough>` mid-visit) is held for the next one, which
+  applies it once, only to the step it resumes on and only if that step awaits
+  it. Safe to create at module scope and on the server.
+- **Handles** on the card wrapper, present with a custom `renderStep` too:
+  `data-walkthrough-requires-action="event" | "target-click"`,
+  `data-walkthrough-awaiting="<event>"`, and `data-walkthrough-action-error`
+  while a failure shows.
+- `WalkthroughStepContext` gains `requiresAction`, `canGoBack` and
+  `actionError`. New types: `WalkthroughController`, `WalkthroughActionMessage`.
+
+### Changed
+
+- **No Back on an action-required step, and none onto one from the step after
+  it.** `back()` refuses that move too. The tour cannot undo what the person
+  did in the app (created a project), so going back would ask them to do it
+  twice. A host or agent can still move a controlled `step`. **Nothing to do**
+  unless your copy told people to press Back on such a step.
+- **Strict TypeScript only:** `WalkthroughEvent` has a new member
+  (`walkthrough:action-failed`) and `WalkthroughLabels` a new key
+  (`actionFailed`). A `switch` that asserts exhaustiveness with `never`, or code
+  that builds a complete `WalkthroughLabels` (not the `Partial` the `labels`
+  prop takes), needs the new case or key. Everything else compiles unchanged.
+
+### Fixed
+
+- **A `signal` sent from the page an action lands on was lost.** The page's
+  mount effect runs before `<Walkthrough>` has read its storage, when no step is
+  current yet. Such a signal is now held and applied to the resumed step. A
+  page that happened to re-run its effect when `signal` changed identity did
+  advance, but reported `walkthrough:started` instead of `resumed` and dropped
+  `first-value`.
+- **`signal` acted on the render it came from.** A callback captured earlier,
+  such as a mutation's `onSuccess`, was ignored if the step had changed since.
+  Worse, one captured before the person pressed Skip **brought the dismissed
+  tour back** on the following step. `signal` now always reads the latest state.
+
 ### Security
 
 - **Dev toolchain only — no runtime change, nothing for consumers to do.** The

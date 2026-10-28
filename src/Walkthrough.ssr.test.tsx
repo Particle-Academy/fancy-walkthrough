@@ -21,4 +21,25 @@ describe("on the server", () => {
     expect(adapter.load()).toBeNull();
     expect(() => adapter.save(null)).not.toThrow();
   });
+
+  it("renders an action-required step, with a module-scope controller signalled on the server", async () => {
+    const { Walkthrough, createWalkthroughController } = await import("./index");
+    const controller = createWalkthroughController();
+    controller.signal("project:created");
+    controller.fail("project:created", "nope");
+    for (const storage of [undefined, null]) {
+      const html = renderToString(
+        <Walkthrough
+          id="a"
+          steps={[{ id: "s", title: "S", target: "t", advanceOn: "event", event: "project:created" }]}
+          defaultStep={0}
+          storage={storage}
+          controller={controller}
+        >
+          <p>app</p>
+        </Walkthrough>,
+      );
+      expect(html).toContain("app");
+    }
+  });
 });

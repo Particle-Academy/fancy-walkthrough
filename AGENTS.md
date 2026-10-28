@@ -18,6 +18,8 @@ The design record is the envelope's `.ai/plans/fancy-walkthrough.md`.
   the glide.
 - `src/Walkthrough.tsx` — step state, events, policies, the default card.
 - `src/types.ts` — `WalkthroughStep`, `WalkthroughDocument`, `WalkthroughEvent`.
+- `src/controller.ts` — `createWalkthroughController()`: signal / fail actions
+  from outside the tree, held while no walkthrough is attached.
 - `src/storage.ts` — `WalkthroughStorage` (`{ load, save, subscribe? }`), the
   localStorage default adapter, and the progress shape check.
 
@@ -88,6 +90,27 @@ must already know its page is still on the way.
 **The card is non-modal.** A focus trap would block the element a
 `target-click` step asks the person to use. Focus moves to the card per step;
 Escape skips.
+
+**`signal` / `fail` read the LATEST state through a ref, never their
+closure.** Hosts call them from a mutation's `onSuccess` or a page's mount, all
+captured at an earlier render. The closure version ignored the awaited signal,
+and one captured before Skip revived the dismissed tour. A sabotage test
+restores the closure and 5 tests fail.
+
+**Signals before `ready` are HELD, not dropped.** A new page's mount effect runs
+before ours reads storage. Held messages are drained once, on the first ready
+commit, against the resumed step, and stop after one advance. After `ready`,
+nothing is ever held: a signal for a non-current step is ignored, never
+remembered, so there is no skipping ahead and nothing after dismissal. The
+controller holds only while NO walkthrough is attached, and hands that to the
+next one under the same once-only rule.
+
+**An action failure belongs to one VISIT of a step.** It is keyed by step AND
+cleared in the transition effect. The key alone would bring the old error back
+after leaving the step and returning, which gives the same `walkthrough#index`.
+
+**No Back onto an action-required step.** `canGoBack` is computed in the root,
+not the card, so `back()` refuses too and a custom card cannot route around it.
 
 **Glide on target change only.** Scroll and resize snap; a hole trailing a
 scrolling page reads as lag. The glide aims at the latest measurement each

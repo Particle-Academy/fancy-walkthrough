@@ -28,6 +28,7 @@ import {
   WalkthroughTarget,
   type TargetRegistry,
 } from "./registry";
+import type { WalkthroughActionMessage, WalkthroughController } from "./controller";
 import { Spotlight } from "./Spotlight";
 import { defaultStorage, type WalkthroughProgress, type WalkthroughStorage } from "./storage";
 import type { WalkthroughDocument, WalkthroughEvent, WalkthroughStep } from "./types";
@@ -44,6 +45,8 @@ export interface WalkthroughLabels {
   waitingForEvent: string;
   /** Shown while a step's target is not mounted yet. */
   waitingForTarget: string;
+  /** Shown when the host reports the step's action failed (`fail(event)`) without a message of its own. */
+  actionFailed: string;
   /** `{current}` and `{total}` are replaced. */
   progress: string;
 }
@@ -56,8 +59,17 @@ const DEFAULT_LABELS: WalkthroughLabels = {
   clickTarget: "Click the highlighted element to continue.",
   waitingForEvent: "Complete this step to continue.",
   waitingForTarget: "Waiting for this part of the page to appear…",
+  actionFailed: "That didn't go through. Try again.",
   progress: "{current} of {total}",
 };
+
+/**
+ * The step is done by the person in the APP, not in the card: clicking the
+ * real target, or something the host confirms with `signal(event)`.
+ */
+function requiresAction(step: WalkthroughStep | undefined): boolean {
+  return step?.advanceOn === "target-click" || step?.advanceOn === "event";
+}
 
 /** What a custom step renderer is handed. */
 export interface WalkthroughStepContext {
@@ -68,6 +80,18 @@ export interface WalkthroughStepContext {
   isLast: boolean;
   /** The step has a target that is not mounted, and its policy is to wait. */
   waitingForTarget: boolean;
+  /**
+   * The step advances on something the person does in the app
+   * (`advanceOn: "target-click"` or `"event"`). Show no Next and no Back.
+   */
+  requiresAction: boolean;
+  /**
+   * Back is allowed: not the first step, not an action-required step, and the
+   * step before is not one either (the tour cannot undo what was done in the app).
+   */
+  canGoBack: boolean;
+  /** What the host reported when this step's action failed, until it succeeds or the step changes. */
+  actionError: string | null;
   labels: WalkthroughLabels;
   next: () => void;
   back: () => void;
@@ -153,6 +177,13 @@ export interface WalkthroughProps {
   registry?: TargetRegistry;
   /** How every step's `body` is read, unless the step says otherwise. Default `"text"`. */
   bodyFormat?: "text" | "markdown";
+  /**
+   * A controller from `createWalkthroughController()`, for signalling actions
+   * from OUTSIDE this tree -- a query client's mutation defaults, a module, a
+   * component in another React root. Inside the tree, `useWalkthrough()` is
+   * enough. Read once, on mount.
+   */
+  controller?: WalkthroughController;
   /** The app. Targets anywhere inside register with this walkthrough. */
   children?: ReactNode;
 }
@@ -171,9 +202,23 @@ export interface WalkthroughApi {
   skip: () => void;
   /**
    * Tell the walkthrough something happened in the app. Advances the current
-   * step when it is `advanceOn: "event"` with this `event`.
+   * step when it is `advanceOn: "event"` with this `event`; anything else is
+   * ignored (no skipping ahead, nothing after dismissal).
+   *
+   * Always acts on the LATEST state, so a callback captured earlier (a
+   * mutation's `onSuccess`) still works. Called before the walkthrough has read
+   * its storage (a new page confirming on mount), it is held and applied to
+   * the step it resumes on.
    */
   signal: (event: string) => void;
+  /**
+   * The action `event` was attempted and failed (the server rejected it). The
+   * step stays put and shows `message` (default: `labels.actionFailed`) until
+   * the action succeeds or the step changes. Emits `walkthrough:action-failed`.
+   */
+  fail: (event: string, message?: string) => void;
+  /** The current step's failure message, or `null`. */
+  actionError: string | null;
   registry: TargetRegistry;
 }
 
@@ -266,6 +311,7 @@ function WalkthroughRoot({
   cardClassName,
   registry: sharedRegistry,
   bodyFormat = "text",
+  controller: controllerProp,
   children,
 }: WalkthroughProps) {
   const [ownRegistry] = useState(createTargetRegistry);
@@ -316,6 +362,8 @@ function WalkthroughRoot({
   // is reported as a step change -- or, to null, as an abandonment -- but never
   // as first value: moving the walkthrough on is not the person doing the thing.
   const reason = useRef<Reason | null>(null);
+  // The current step's action failure, reported by the host with `fail()`.
+  const [actionError, setActionError] = useState<{ key: string; message: string } | null>(null);
 
   const go = useCallback(
     (next: number | null, why: Reason) => {
@@ -361,9 +409,13 @@ function WalkthroughRoot({
     if (index >= stepCount - 1) finish(true);
     else go(index + 1, "next");
   }, [go, finish, index, stepCount]);
+  // Not back ONTO an action-required step: the person already did that thing
+  // in the app (created the project), and the tour cannot undo it -- going back
+  // would ask them to do it twice. A host or agent can still move `step`.
+  const canGoBack = index !== null && index > 0 && !requiresAction(docSteps?.[index - 1]);
   const back = useCallback(() => {
-    if (index !== null && index > 0) go(index - 1, "back");
-  }, [go, index]);
+    if (canGoBack && index !== null) go(index - 1, "back");
+  }, [go, index, canGoBack]);
   const skip = useCallback(() => {
     if (index !== null) go(null, "skip");
   }, [go, index]);
@@ -379,6 +431,10 @@ function WalkthroughRoot({
     const why = reason.current;
     reason.current = null;
     if (prev.walkthrough === activeId && prev.index === index) return;
+    // A failure belongs to one VISIT of a step. Leaving and coming back
+    // (`start(0)`, then forward again) is the same step key, so the key alone
+    // would show the old error again.
+    setActionError(null);
 
     const prevDoc = library.find((d) => d.id === prev.walkthrough) ?? null;
     const prevIndex = prev.index;
@@ -483,12 +539,77 @@ function WalkthroughRoot({
     };
   }, [store]);
 
-  const signal = useCallback(
-    (event: string) => {
-      if (current?.advanceOn === "event" && current.event === event) next();
-    },
-    [current, next],
-  );
+  // ---- Actions done in the app, reported by the host ------------------------
+  //
+  // `signal` / `fail` read the LATEST state through a ref, never their render's
+  // closure: the host calls them from a mutation's `onSuccess`, a socket
+  // handler or a new page's mount, all of which captured them at some earlier
+  // render. Acting on that render's `current` would ignore the very signal the
+  // step is waiting for.
+  // Keyed by step, so an error never follows the walkthrough to another step.
+  const shownError = actionError !== null && actionError.key === stepKey ? actionError.message : null;
+  const actionState = useRef({ ready, current, stepKey, activeId, next, labels, emit });
+  actionState.current = { ready, current, stepKey, activeId, next, labels, emit };
+  // Messages that arrived before the store was read: a page confirming its
+  // action on mount runs its effect BEFORE ours. Applied once, to the step the
+  // walkthrough resumes on.
+  const held = useRef<WalkthroughActionMessage[]>([]);
+
+  /** Returns true when it advanced the walkthrough. */
+  const receive = useCallback((message: WalkthroughActionMessage): boolean => {
+    const { ready: isReady, current: step, stepKey: key, activeId: walkthrough, next: advance, labels: words, emit: report } = actionState.current;
+    if (!isReady) {
+      held.current.push(message);
+      return false;
+    }
+    // Only the CURRENT step's own action counts. A signal for a later step is
+    // ignored rather than remembered: honouring it would skip the steps
+    // between, and a duplicate (a double submit) would skip one more.
+    if (!step || key === null || step.advanceOn !== "event" || step.event !== message.event) return false;
+    if (message.kind === "signal") {
+      setActionError(null);
+      advance();
+      return true;
+    }
+    setActionError({ key, message: message.message ?? words.actionFailed });
+    report({
+      type: "walkthrough:action-failed",
+      walkthrough: walkthrough ?? "",
+      step: step.id,
+      event: message.event,
+      ...(message.message !== undefined ? { message: message.message } : {}),
+    });
+    return false;
+  }, []);
+
+  const drain = useCallback(() => {
+    const pending = held.current;
+    held.current = [];
+    // At most one advance: a held message was meant for the step it found.
+    for (const message of pending) if (receive(message)) break;
+  }, [receive]);
+
+  useEffect(() => {
+    if (ready) drain();
+  }, [ready, drain]);
+
+  const [controller] = useState(() => controllerProp);
+  useEffect(() => {
+    if (!controller) return;
+    const { held: waiting, disconnect } = controller.connect((message) => {
+      receive(message);
+    });
+    held.current.push(...waiting);
+    if (actionState.current.ready) drain();
+    return disconnect;
+  }, [controller, receive, drain]);
+
+  const signal = useCallback((event: string) => {
+    receive({ kind: "signal", event });
+  }, [receive]);
+  const fail = useCallback((event: string, message?: string) => {
+    receive(message === undefined ? { kind: "fail", event } : { kind: "fail", event, message });
+  }, [receive]);
 
   const targetEl = useTargetElement(current?.target, registry);
   const missing = running && current.target !== undefined && targetEl === null;
@@ -557,8 +678,20 @@ function WalkthroughRoot({
   useEscapeKey(skip, running);
 
   const api = useMemo<WalkthroughApi>(
-    () => ({ step: running ? index : null, current, walkthrough: activeId ?? null, start, next, back, skip, signal, registry }),
-    [running, index, current, activeId, start, next, back, skip, signal, registry],
+    () => ({
+      step: running ? index : null,
+      current,
+      walkthrough: activeId ?? null,
+      start,
+      next,
+      back,
+      skip,
+      signal,
+      fail,
+      actionError: shownError,
+      registry,
+    }),
+    [running, index, current, activeId, start, next, back, skip, signal, fail, shownError, registry],
   );
 
   return (
@@ -573,6 +706,8 @@ function WalkthroughRoot({
           target={missing ? null : targetEl}
           waitingForTarget={missing && (policy === "wait" || navigating)}
           navigatingTo={navigating ? current.route : undefined}
+          canGoBack={canGoBack && !requiresAction(current)}
+          actionError={shownError}
           labels={labels}
           padding={padding}
           radius={radius}
@@ -599,6 +734,8 @@ interface OverlayProps {
   waitingForTarget: boolean;
   /** The route the host was asked to navigate to and has not reached yet. */
   navigatingTo?: string;
+  canGoBack: boolean;
+  actionError: string | null;
   labels: WalkthroughLabels;
   padding: number;
   radius: number;
@@ -620,6 +757,8 @@ function WalkthroughOverlay({
   target,
   waitingForTarget,
   navigatingTo,
+  canGoBack,
+  actionError,
   labels,
   padding,
   radius,
@@ -658,6 +797,9 @@ function WalkthroughOverlay({
     isFirst: index === 0,
     isLast: index === total - 1,
     waitingForTarget,
+    requiresAction: requiresAction(step),
+    canGoBack,
+    actionError,
     labels,
     next,
     back,
@@ -665,6 +807,10 @@ function WalkthroughOverlay({
   };
 
   const titleId = `fw-${step.id}-title`;
+  // Handles an agent (or a test) reads without the registry: what kind of
+  // action this step awaits, which event, and the failure if one is showing.
+  // On the wrapper, so a custom `renderStep` card carries them too.
+  const awaits = requiresAction(step) ? (step.advanceOn as "target-click" | "event") : undefined;
 
   return (
     <>
@@ -695,6 +841,9 @@ function WalkthroughOverlay({
           data-walkthrough-card={step.id}
           data-walkthrough-id={walkthrough}
           data-walkthrough-navigating={navigatingTo}
+          data-walkthrough-requires-action={awaits}
+          data-walkthrough-awaiting={awaits === "event" ? step.event : undefined}
+          data-walkthrough-action-error={actionError ?? undefined}
           data-walkthrough-placement={anchored ? position.placement : "center"}
           style={
             anchored
@@ -724,7 +873,7 @@ function DefaultCard({
   className?: string;
   bodyFormat: "text" | "markdown";
 }) {
-  const { step, index, total, isFirst, isLast, waitingForTarget, labels, next, back, skip } = context;
+  const { step, index, total, isLast, waitingForTarget, canGoBack, actionError, labels, next, back, skip } = context;
   const markdown = (step.bodyFormat ?? bodyFormat) === "markdown";
   const advance = step.advanceOn ?? "next";
   const progress = labels.progress.replace("{current}", String(index + 1)).replace("{total}", String(total));
@@ -772,9 +921,14 @@ function DefaultCard({
             {labels.waitingForEvent}
           </Text>
         )}
+        {actionError !== null && (
+          <Text as="p" size="xs" color="danger" role="alert" data-walkthrough-error="">
+            {actionError}
+          </Text>
+        )}
       </div>
       <div className="flex items-center justify-end gap-2">
-        {!isFirst && (
+        {canGoBack && (
           <Button variant="ghost" size="sm" onClick={back} data-walkthrough-action="back">
             {labels.back}
           </Button>
