@@ -11,6 +11,12 @@ upgrading.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-01
+
+### Changed
+
+- **The `@particle-academy/react-fancy` peer range now also accepts 6.x** (`>=5.27 <6` to `>=5.27 <7`). react-fancy 6.0.0 makes `Button` default to `type="button"` instead of submitting an enclosing form (Change Council CC-fancy-0003). Audited for that: its three `Button`s (skip, back, next) are actions and none sits inside a form. No `Button` needed `type="submit"` and no `PromptInput` is used, so the package behaves the same on 5 and 6. On 6 its `Button`s also stop submitting a host form you happen to render it inside. The devDependency moved to `^6.0.0`, so this package's own suite, typecheck and build now run against 6. Widening only adds candidates, so the react-fancy you already have still resolves. **Consumer action:** none on react-fancy 5; on react-fancy 6 it works as-is.
+
 ### Security
 
 - Dev-only lockfile update: `vitest` 4.1.11 to 4.1.12 (brings `@vitest/mocker` 4.1.12, GHSA-qxg6-89mg-rqv8 / GHSA-xp26-3454-mjgp) and `undici` 7.30.0 to 7.30.1 via jsdom (GHSA-2m5v-pch6-74hx, GHSA-4w7w-5xrc-9h26, GHSA-qrxm-fqhp-jwvm, GHSA-xjj6-f33q-929c, GHSA-9fm3-97px-rjf6). Neither ships in the package. Consumer action: none.
